@@ -1,0 +1,8 @@
+{
+    "shape_t": 4,
+    "shape_c": 2,
+    "shape_z": 23,
+    "shape_y": 1024,
+    "shape_x": 1024,
+    "dtype": "float32"
+}
