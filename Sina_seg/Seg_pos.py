@@ -488,104 +488,127 @@ class NucleiSegmentationAnnotation:
 
 
 
+def post_process_worldline_seg(combined_df_t_idx, abs_pos, seg):
+    combined_df_t_idx['expected_ID'] = np.arange(1,len(abs_pos)+1)
+    combined_df_t_idx['seged_ID'] = seg[tuple(abs_pos.T)]
+    combined_df_t_idx[['global_z', 'global_y', 'global_x']] = abs_pos
+    filltered_df = combined_df_t_idx[['expected_ID','seged_ID','worldline_id','global_z', 'global_y', 'global_x']]
+    
+    set_ID = set(np.unique(seg)) - set(seg[tuple(abs_pos.T)])
+    if 0 in set_ID:
+        set_ID.remove(0)
+    
+    for unseg_ID in set_ID:
+        z_pos = int(filltered_df[filltered_df['expected_ID'] == unseg_ID]['global_z'].values)
+        seg_ID = int(filltered_df[filltered_df['expected_ID'] == unseg_ID]['seged_ID'].values)
+        if seg_ID>0:
+            ind = np.where(seg[z_pos]==seg_ID)
+            seg[z_pos, ind[0], ind[1]] = unseg_ID
+            print(z_pos)
+    
+    no_seg_df  = filltered_df[filltered_df['expected_ID']!= filltered_df['seged_ID']]
+    coords = no_seg_df[['global_z',	'global_y',	'global_x']].values
+    coords = coords.reshape(-1,3)
+    for i in range(coords.shape[0]):  # Iterate over all coordinates
+        seg[coords[i, 0], coords[i, 1]-1:coords[i, 1]+2, coords[i, 2]-1:coords[i, 2]+2] = no_seg_df['expected_ID'].iloc[i]
+    return seg
 
 
 
-
-def post_process_worldline_seg(folder_path,model,img_original,combined_df_t_idx,abs_pos,seg):
-    '''
-    Post process the seg based on the worldline annotation
-    1. load the worldline annotation
-    2. compare the worldline annotation with the seg,
-    3. if the worldline annotation is empty, then ignore this row
-    4. if the worldline annotation is occupied by the seg without name, then transfer the seg_ID to the worldline_ID
-    5. if the worldline annotation and seg do have names and overlap, then split the seg_ID to two neurons
-    6. if the worldline annotation is not in the seg, then we need to predict the seg based on the worldline_ID: 
-    return the updated seg
-    '''
-
-
-    worldline_df = load_worldline_h5(folder_path/'worldlines.h5')
-    worldline_df = worldline_df.rename(columns = {'id':'worldline_id'}) 
-    combined_df_t_idx = pd.merge(combined_df_t_idx, worldline_df, on='worldline_id', how='left')
+# def post_process_worldline_seg(folder_path,model,img_original,combined_df_t_idx,abs_pos,seg):
+#     '''
+#     Post process the seg based on the worldline annotation
+#     1. load the worldline annotation
+#     2. compare the worldline annotation with the seg,
+#     3. if the worldline annotation is empty, then ignore this row
+#     4. if the worldline annotation is occupied by the seg without name, then transfer the seg_ID to the worldline_ID
+#     5. if the worldline annotation and seg do have names and overlap, then split the seg_ID to two neurons
+#     6. if the worldline annotation is not in the seg, then we need to predict the seg based on the worldline_ID: 
+#     return the updated seg
+#     '''
 
 
-    seg_IDs = seg[tuple(abs_pos.T)] 
-    expected_seg_IDs = np.arange(1, len(abs_pos)+1)
-    ind = np.where( seg_IDs[seg_IDs!= expected_seg_IDs]>0 )
-    IDs_pair = np.vstack([expected_seg_IDs[seg_IDs!= expected_seg_IDs], seg_IDs[seg_IDs!= expected_seg_IDs]]).T
+#     worldline_df = load_worldline_h5(folder_path/'worldlines.h5')
+#     worldline_df = worldline_df.rename(columns = {'id':'worldline_id'}) 
+#     combined_df_t_idx = pd.merge(combined_df_t_idx, worldline_df, on='worldline_id', how='left')
 
 
-    for IDs in IDs_pair:
-        expected_ID = IDs[0]
-        expected_name = worldline_df[worldline_df['worldline_id']== (expected_ID - 1)]['name'].values
-        seg_ID = IDs[1]
-        seg_name = worldline_df[worldline_df['worldline_id']== (seg_ID - 1)]['name'].values
-        # print(IDs)
-        if expected_name == b'':
-            '''
-            if the expected name is empty, then ignore this row
-            '''
-            ## remove this row in the IDs_pair 
-            IDs_pair = IDs_pair[IDs_pair[:,0] != expected_ID]
+#     seg_IDs = seg[tuple(abs_pos.T)] 
+#     expected_seg_IDs = np.arange(1, len(abs_pos)+1)
+#     ind = np.where( seg_IDs[seg_IDs!= expected_seg_IDs]>0 )
+#     IDs_pair = np.vstack([expected_seg_IDs[seg_IDs!= expected_seg_IDs], seg_IDs[seg_IDs!= expected_seg_IDs]]).T
 
 
-        elif seg_ID > 0 and seg_name == b'' :
-            '''
-            if the expected neuron is occupied by the seged neuron without name, then transfer the seg_ID to the expected_ID
-            '''
-            seg[seg == seg_ID] = expected_ID
-            ## replace the seg_ID with expected_ID in the IDs_pair
-            # IDs_pair[IDs_pair[:,0] == expected_ID, 1] = expected_ID
-            ## remove this row in the IDs_pair
-            IDs_pair = IDs_pair[IDs_pair[:,0] != expected_ID]
+#     for IDs in IDs_pair:
+#         expected_ID = IDs[0]
+#         expected_name = worldline_df[worldline_df['worldline_id']== (expected_ID - 1)]['name'].values
+#         seg_ID = IDs[1]
+#         seg_name = worldline_df[worldline_df['worldline_id']== (seg_ID - 1)]['name'].values
+#         # print(IDs)
+#         if expected_name == b'':
+#             '''
+#             if the expected name is empty, then ignore this row
+#             '''
+#             ## remove this row in the IDs_pair 
+#             IDs_pair = IDs_pair[IDs_pair[:,0] != expected_ID]
 
 
-        elif seg_ID > 0 and seg_name != b'' and expected_name != b'':
-            '''
-            if the expected and seg neurons do have names and overlap, then split the seg_ID to two neurons
-            '''
-            z_list = list(abs_pos[IDs-1][:,0])
-            if z_list[0] != z_list[1]:
+#         elif seg_ID > 0 and seg_name == b'' :
+#             '''
+#             if the expected neuron is occupied by the seged neuron without name, then transfer the seg_ID to the expected_ID
+#             '''
+#             seg[seg == seg_ID] = expected_ID
+#             ## replace the seg_ID with expected_ID in the IDs_pair
+#             # IDs_pair[IDs_pair[:,0] == expected_ID, 1] = expected_ID
+#             ## remove this row in the IDs_pair
+#             IDs_pair = IDs_pair[IDs_pair[:,0] != expected_ID]
+
+
+#         elif seg_ID > 0 and seg_name != b'' and expected_name != b'':
+#             '''
+#             if the expected and seg neurons do have names and overlap, then split the seg_ID to two neurons
+#             '''
+#             z_list = list(abs_pos[IDs-1][:,0])
+#             if z_list[0] != z_list[1]:
                 
-                seg_z_list = np.unique(np.where(seg==IDs[1])[0])
-                if z_list[0] < min(z_list):
-                    resign = seg_z_list[seg_z_list < np.mean(z_list)]
-                else:
-                    resign = seg_z_list[seg_z_list > np.mean(z_list)]
-                ind = np.array(np.where(seg==IDs[1]))
-                mask = np.isin(ind[0, :], resign)
-                selected_ind = ind[:, mask]
-                seg[tuple(selected_ind)] = expected_ID
-                ## remove this row in the IDs_pair
-                IDs_pair = IDs_pair[IDs_pair[:,0] != expected_ID]
-            else:
-                '''
-                May need to split the neuron in the z plane in the future
-                '''
-                print("Warning: the two neurons are in the same z plane", IDs)
+#                 seg_z_list = np.unique(np.where(seg==IDs[1])[0])
+#                 if z_list[0] < min(z_list):
+#                     resign = seg_z_list[seg_z_list < np.mean(z_list)]
+#                 else:
+#                     resign = seg_z_list[seg_z_list > np.mean(z_list)]
+#                 ind = np.array(np.where(seg==IDs[1]))
+#                 mask = np.isin(ind[0, :], resign)
+#                 selected_ind = ind[:, mask]
+#                 seg[tuple(selected_ind)] = expected_ID
+#                 ## remove this row in the IDs_pair
+#                 IDs_pair = IDs_pair[IDs_pair[:,0] != expected_ID]
+#             else:
+#                 '''
+#                 May need to split the neuron in the z plane in the future
+#                 '''
+#                 print("Warning: the two neurons are in the same z plane", IDs)
 
 
-        elif seg_ID == 0 and expected_name != b'':
-            '''
-            if the expected_ID is not in the seg, then we need to predict the seg based on the expected_ID: 
-            find the channel with the highest intensity in the expected_ID with neuron channels[0,1,2,3], 
-            the fifth channel is the background,
-            apply mask for seg==0,
-            and predict the seg based on the normalized intensity
-            '''
-            coords = abs_pos[expected_ID-1]
-            ch = np.argmax(img_original[0,0:4,coords[0],coords[1],coords[2]])
-            img_pred = img_original[0, ch, coords[0]] * (seg[coords[0]]==0)
-            label_z, _ = model.predict_instances(normalize(img_pred, 1, 99.5))
-            ID_z = label_z[tuple(coords[1:3].T)] 
-            ind = label_z == ID_z
-            seg[coords[0]][ind] = expected_ID
-            IDs_pair = IDs_pair[IDs_pair[:,0] != expected_ID]
+#         elif seg_ID == 0 and expected_name != b'':
+#             '''
+#             if the expected_ID is not in the seg, then we need to predict the seg based on the expected_ID: 
+#             find the channel with the highest intensity in the expected_ID with neuron channels[0,1,2,3], 
+#             the fifth channel is the background,
+#             apply mask for seg==0,
+#             and predict the seg based on the normalized intensity
+#             '''
+#             coords = abs_pos[expected_ID-1]
+#             ch = np.argmax(img_original[0,0:4,coords[0],coords[1],coords[2]])
+#             img_pred = img_original[0, ch, coords[0]] * (seg[coords[0]]==0)
+#             label_z, _ = model.predict_instances(normalize(img_pred, 1, 99.5))
+#             ID_z = label_z[tuple(coords[1:3].T)] 
+#             ind = label_z == ID_z
+#             seg[coords[0]][ind] = expected_ID
+#             IDs_pair = IDs_pair[IDs_pair[:,0] != expected_ID]
 
 
-    # IDs_pair
-    return seg  
+#     # IDs_pair
+#     return seg  
 
 
 
