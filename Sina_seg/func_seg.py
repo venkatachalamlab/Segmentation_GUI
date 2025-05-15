@@ -133,9 +133,8 @@ def get_frame_segmentation(model,model_2D,t_idx, ch, zoom_factor,folder_path,gam
       
     img_norm = normalize(img_zoom, 1,99.8)
     img_proj_pred = get_mask_from_proj_pred(model_2D,img_zoom)
-    pred, _ = model.predict_instances(img_norm*((img_proj_pred>0)), n_tiles=model._guess_n_tiles(img_norm), show_tile_progress=False)
-    
-    # pred, _ = model.predict_instances(img_norm, n_tiles=model._guess_n_tiles(img_norm), show_tile_progress=False)
+    # pred, _ = model.predict_instances(img_norm*((img_proj_pred>0)), n_tiles=model._guess_n_tiles(img_norm), show_tile_progress=False)
+    pred, _ = model.predict_instances(img_norm, n_tiles=model._guess_n_tiles(img_norm), show_tile_progress=False)
     label_z = scipy.ndimage.zoom(pred,[1,1/zoom_factor,1/zoom_factor],order = 0)
     # print("label_z",np.unique(label_z))
     return label_z
