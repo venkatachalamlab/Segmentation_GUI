@@ -126,9 +126,11 @@ def get_frame_segmentation(model,model_2D,t_idx, ch, zoom_factor,folder_path,gam
     img_original,_ = get_volume_at_frame(os.path.join(folder_path,'data.h5'),t_idx)    
     
     img_zoom = scipy.ndimage.zoom(img_original[0,ch],[1,zoom_factor,zoom_factor],order = 0)
+    img_zoom = 255*img_zoom/np.max(img_zoom)
     if gamma is not None:
         # img_zoom = 255 * (img_zoom.astype(np.float32)/255)**gamma
         img_zoom = gamma_correction(img_zoom, gamma)
+      
     img_norm = normalize(img_zoom, 1,99.8)
     img_proj_pred = get_mask_from_proj_pred(model_2D,img_zoom)
     pred, _ = model.predict_instances(img_norm*((img_proj_pred>0)), n_tiles=model._guess_n_tiles(img_norm), show_tile_progress=False)
